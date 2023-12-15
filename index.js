@@ -13,8 +13,8 @@ const BlockFlag = {
 const directiveSymbol = Symbol();
 
 class Context {
-  constructor(globalEnv = {}) {
-    this._globalEnv = globalEnv;
+  constructor() {
+    this._globalEnv = {};
     this._currentRenderable = null;
     this._pendingMutationEffects = [];
     this._pendingLayoutEffects = [];
@@ -199,7 +199,11 @@ class Context {
   }
 
   setEnv(env) {
-    this._envStack.set(this._currentRenderable, env);
+    if (this._currentRenderable) {
+      this._envStack.set(this._currentRenderable, env);
+    } else {
+      Object.assign(this._globalEnv, env);
+    }
   }
 
   requestUpdate(renderable) {
