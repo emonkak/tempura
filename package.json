@@ -1,0 +1,10 @@
+{
+  "name": "@emonkak/tempura",
+  "version": "0.0.0",
+  "main": "index.js",
+  "author": "Shota Nozaki",
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^1.4.1"
+  }
+}
