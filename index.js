@@ -1240,11 +1240,11 @@ class Signal {
   }
 
   map(selector) {
-    return new ProjectedSignal(this, selector);
+    return new Projection(this, selector);
   }
 }
 
-class AtomSignal extends Signal {
+class Atom extends Signal {
   constructor(initialValue) {
     super();
     this._value = initialValue;
@@ -1273,7 +1273,7 @@ class AtomSignal extends Signal {
   }
 }
 
-class ProjectedSignal extends Signal {
+class Projection extends Signal {
   constructor(signal, selectorFn) {
     super();
     this._signal = signal;
@@ -1290,7 +1290,7 @@ class ProjectedSignal extends Signal {
   }
 }
 
-class ComputedSignal extends Signal {
+class Computation extends Signal {
   constructor(computeFn, signals) {
     super();
     this._computeFn = computeFn;
@@ -1631,7 +1631,7 @@ function yieldToMain() {
   });
 }
 
-const counterSignal = new AtomSignal(0);
+const counterSignal = new Atom(0);
 
 function App(_props, context) {
   const [items, setItems] = context.useState([
