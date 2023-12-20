@@ -42,6 +42,14 @@ class Context {
     return new TemplateResult(template, values);
   }
 
+  useAtom(value) {
+    const atomRef = this.useRef(null);
+    if (atomRef.current === null) {
+      atomRef.current = new Atom(value);
+    }
+    return atomRef.current;
+  }
+
   useCallback(callback, dependencies) {
     return this.useMemo(() => callback, dependencies);
   }
