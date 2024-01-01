@@ -947,6 +947,7 @@ class Block extends Child {
     this._pendingProps = props;
     this._memoizedProps = props;
     this._memoizedValues = null;
+    this._lastTemplate = null;
     this._parent = parent;
     this._flags = BlockFlag.DIRTY;
     this._nodes = [];
@@ -1000,17 +1001,21 @@ class Block extends Child {
   }
 
   render(context) {
+    const render = this._type;
+    const { template, values } = render(this._pendingProps, context);
+
+    if (this._lastTemplate !== null && this._lastTemplate !== template) {
+      this._cleanTemplateStates(context);
+      this._memoizedValues = null;
+    }
+
     if (this._memoizedValues === null) {
-      const render = this._type;
-      const { template, values } = render(this._pendingProps, context);
       const { node, parts, cleanups } = template.mount(values, context);
       this._nodes = Array.from(node.childNodes);
       this._parts = parts;
       this._cleanups = cleanups;
       this._memoizedValues = values;
     } else {
-      const render = this._type;
-      const { template, values } = render(this._pendingProps, context);
       template.patch(
         this._parts,
         this._memoizedValues,
@@ -1023,6 +1028,7 @@ class Block extends Child {
 
     this._flags ^= BlockFlag.DIRTY;
     this._memoizedProps = this._pendingProps;
+    this._lastTemplate = template;
   }
 
   mount(part, _context) {
@@ -1037,17 +1043,24 @@ class Block extends Child {
   }
 
   unmount(_part, context) {
-    for (let i = 0, l = this._nodes.length; i < l; i++) {
-      const node = this._nodes[i];
-      if (node.isConnected) {
-        node.remove();
-      }
-    }
-
     for (let i = 0, l = this._hooks.length; i < l; i++) {
       const hook = this._hooks[i];
       if (hook instanceof EffectHook || hook instanceof SignalHook) {
         hook.dispose(context);
+      }
+    }
+
+    this._cleanTemplateStates(context);
+
+    this._flags |= BlockFlag.UNMOUNTED;
+    this._flags ^= BlockFlag.DIRTY;
+  }
+
+  _cleanTemplateStates(context) {
+    for (let i = 0, l = this._nodes.length; i < l; i++) {
+      const node = this._nodes[i];
+      if (node.isConnected) {
+        node.remove();
       }
     }
 
@@ -1061,9 +1074,6 @@ class Block extends Child {
     for (let i = 0, l = this._cleanups.length; i < l; i++) {
       this._cleanups[i]?.call();
     }
-
-    this._flags |= BlockFlag.UNMOUNTED;
-    this._flags ^= BlockFlag.DIRTY;
   }
 }
 
