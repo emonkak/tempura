@@ -10,7 +10,7 @@ const BlockFlag = {
   DIRTY: 0b100,
 };
 
-const directiveSymbol = Symbol();
+const directive = Symbol();
 
 class Context {
   constructor() {
@@ -498,6 +498,10 @@ class ChildPart {
     this._node = node;
     this._committedValue = null;
     this._pendingValue = null;
+  }
+
+  get node() {
+    return this._node;
   }
 
   get startNode() {
@@ -1086,7 +1090,7 @@ class Ref {
     this.current = initialValue;
   }
 
-  [directiveSymbol](part, _context) {
+  [directive](part, _context) {
     this.current = part.node;
   }
 }
@@ -1105,7 +1109,7 @@ class BlockDirective {
     return this._props;
   }
 
-  [directiveSymbol](part, context) {
+  [directive](part, context) {
     const value = part.value;
 
     let needsMount = false;
@@ -1141,7 +1145,7 @@ class ListDirective {
     this._keySelector = keySelector;
   }
 
-  [directiveSymbol](part, context) {
+  [directive](part, context) {
     const value = part.value;
 
     if (value instanceof List) {
@@ -1180,7 +1184,7 @@ class TemplateResult {
     return this._values;
   }
 
-  [directiveSymbol](part, context) {
+  [directive](part, context) {
     const value = part.value;
 
     let needsMount = false;
@@ -1212,6 +1216,31 @@ class TemplateResult {
   }
 }
 
+class ClassList {
+  constructor(classSpecifiers) {
+    this._classSpecifiers = classSpecifiers;
+  }
+
+  [directive](part, _context) {
+    const { classList } = part.node;
+
+    for (let i = 0, l = this._classSpecifiers.length; i < l; i++) {
+      const classSpecifier = this._classSpecifiers[i];
+      if (typeof classSpecifier === 'string') {
+        classList.add(classSpecifier);
+      } else {
+        for (const className in classSpecifier) {
+          if (classSpecifier[className]) {
+            classList.add(className);
+          } else {
+            classList.remove(className);
+          }
+        }
+      }
+    }
+  }
+}
+
 class Signal {
   get value() {
     return null;
@@ -1221,13 +1250,13 @@ class Signal {
     return () => {};
   }
 
-  [directiveSymbol](part, context) {
+  [directive](part, context) {
     const value = this.value;
 
     let cleanup;
 
     if (isDirective(value)) {
-      cleanup = value[directiveSymbol](part, context);
+      cleanup = value[directive](part, context);
     } else {
       part.setValue(value);
       context.pushMutationEffect(part);
@@ -1242,7 +1271,7 @@ class Signal {
       }
 
       if (isDirective(value)) {
-        cleanup = value[directiveSymbol](part, context);
+        cleanup = value[directive](part, context);
       } else {
         part.setValue(value);
         context.pushMutationEffect(part);
@@ -1409,6 +1438,10 @@ function block(type, props = {}) {
   return new BlockDirective(type, props);
 }
 
+function classList(...classSpecifiers) {
+  return new ClassList(classSpecifiers);
+}
+
 function list(
   items,
   valueSelector = defaultItemValueSelector,
@@ -1486,14 +1519,14 @@ function getUUID() {
 }
 
 function isDirective(value) {
-  return typeof value === 'object' && directiveSymbol in value;
+  return typeof value === 'object' && directive in value;
 }
 
 function mountPart(part, value, context) {
   let cleanup;
 
   if (isDirective(value)) {
-    cleanup = value[directiveSymbol](part, context);
+    cleanup = value[directive](part, context);
   } else {
     part.setValue(value);
     context.pushMutationEffect(part);
@@ -1503,32 +1536,36 @@ function mountPart(part, value, context) {
 }
 
 function parseAttribtues(node, marker, holes, path, index) {
-  const { attributes } = node;
+  // Persist node attributes since ones may be removed.
+  const attributes = [...node.attributes];
   for (let i = 0, l = attributes.length; i < l; i++) {
     const attribute = attributes[i];
-    if (attribute.value === marker) {
-      const name = attribute.name;
-      if (
-        name.length > 2 &&
-        (name[0] === 'o' || name[0] === 'O') &&
-        (name[1] === 'n' || name[1] === 'N')
-      ) {
-        holes.push({
-          type: HoleType.EVENT,
-          path,
-          index,
-          name: attribute.name.slice(2),
-        });
-      } else {
-        holes.push({
-          type: HoleType.ATTRIBUTE,
-          path,
-          index,
-          name,
-        });
-      }
-      node.removeAttribute(attribute.name);
+    if (attribute.value !== marker) {
+      continue;
     }
+
+    const name = attribute.name;
+    if (
+      name.length > 2 &&
+      (name[0] === 'o' || name[0] === 'O') &&
+      (name[1] === 'n' || name[1] === 'N')
+    ) {
+      holes.push({
+        type: HoleType.EVENT,
+        path,
+        index,
+        name: name.slice(2),
+      });
+    } else {
+      holes.push({
+        type: HoleType.ATTRIBUTE,
+        path,
+        index,
+        name,
+      });
+    }
+
+    node.removeAttribute(name);
   }
 }
 
@@ -1629,7 +1666,7 @@ function updatePart(part, oldValue, newValue, oldCleanup, context) {
     oldCleanup?.call();
 
     if (isDirective(newValue)) {
-      newCleanup = newValue[directiveSymbol](part, context);
+      newCleanup = newValue[directive](part, context);
     } else {
       part.setValue(newValue);
       context.pushMutationEffect(part);
@@ -1712,7 +1749,7 @@ function App(_props, context) {
   return context.html`
         <div>
             ${block(Counter, {
-              count: counterSignal.map((count) => count * 2),
+              count: counterSignal,
             })}
             <ul>${itemsList}</ul>
             <p>
@@ -1738,12 +1775,20 @@ function Item(props, context) {
 }
 
 function Counter(props, context) {
+  const { count } = props;
   const countLabelRef = context.useRef(null);
+
+  context.useSignal(count);
 
   return context.html`
         <h1>
             <span class="count-label" ref=${countLabelRef}>COUNT: </span>
-            <span class="count-value" data-count=${props.count}>${props.count}</span>
+            <span
+                class=${classList('count-value', {
+                  'is-odd': count.value % 2 !== 0,
+                  'is-even': count.value % 2 === 0,
+                })}
+                data-count=${count}>${count}</span>
         </h1>
     `;
 }
